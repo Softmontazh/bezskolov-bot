@@ -32,43 +32,55 @@ async def show_price_list(message: types.Message, state: FSMContext):
 
     if not prices:
         await message.answer(
-            "📋 Прайс-лист пуст.", 
+            "📋 Прайс-лист пуст.",
             reply_markup=InlineKeyboardMarkup(
                 inline_keyboard=[
-                    [InlineKeyboardButton(text="➕ Добавить позицию", callback_data="add_price_item")]
+                    [
+                        InlineKeyboardButton(
+                            text="➕ Добавить позицию", callback_data="add_price_item"
+                        )
+                    ]
                 ]
-            )
+            ),
         )
         return
 
     await message.answer("📋 Управление прайс-листом:")
-    
+
     for price in prices:
         price_text = (
             f"📦 {price.title}\n"
             f"💰 Цена: {price.price // 100}.{price.price % 100:02d} тг.\n"
             f"📝 Описание: {price.description or 'Не указано'}"
         )
-        
+
         kb = InlineKeyboardMarkup(
             inline_keyboard=[
                 [
-                    InlineKeyboardButton(text="✏️ Изменить", callback_data=f"edit_price_{price.id}"),
-                    InlineKeyboardButton(text="🗑️ Удалить", callback_data=f"delete_price_{price.id}")
+                    InlineKeyboardButton(
+                        text="✏️ Изменить", callback_data=f"edit_price_{price.id}"
+                    ),
+                    InlineKeyboardButton(
+                        text="🗑️ Удалить", callback_data=f"delete_price_{price.id}"
+                    ),
                 ]
             ]
         )
-        
+
         await message.answer(price_text, reply_markup=kb)
-    
+
     # Кнопка добавления новой позиции
     await message.answer(
         "Управление прайс-листом:",
         reply_markup=InlineKeyboardMarkup(
             inline_keyboard=[
-                [InlineKeyboardButton(text="➕ Добавить позицию", callback_data="add_price_item")]
+                [
+                    InlineKeyboardButton(
+                        text="➕ Добавить позицию", callback_data="add_price_item"
+                    )
+                ]
             ]
-        )
+        ),
     )
 
 
@@ -84,7 +96,7 @@ async def show_price_for_users(message: types.Message):
         return
 
     price_text = "💰 **Прайс-лист услуг:**\n\n"
-    
+
     for i, price in enumerate(prices, 1):
         price_text += (
             f"**{i}. {price.title}**\n"
@@ -93,9 +105,9 @@ async def show_price_for_users(message: types.Message):
         if price.description:
             price_text += f"📝 {price.description}\n"
         price_text += "\n"
-    
+
     price_text += "📞 Для заказа оформите заявку!"
-    
+
     await message.answer(price_text, parse_mode="Markdown")
 
 
@@ -105,7 +117,7 @@ async def add_price_item_start(callback: types.CallbackQuery, state: FSMContext)
     if not await is_admin(callback.from_user.id):
         await callback.answer("Доступ запрещен", show_alert=True)
         return
-    
+
     await callback.answer()
     await callback.message.answer("📦 Введите название позиции:")
     await state.set_state(PriceFSM.add_title)
@@ -114,7 +126,9 @@ async def add_price_item_start(callback: types.CallbackQuery, state: FSMContext)
 @router.message(PriceFSM.add_title)
 async def add_price_title(message: types.Message, state: FSMContext):
     await state.update_data(title=message.text)
-    await message.answer("📝 Введите описание позиции (или отправьте '-' чтобы пропустить):")
+    await message.answer(
+        "📝 Введите описание позиции (или отправьте '-' чтобы пропустить):"
+    )
     await state.set_state(PriceFSM.add_description)
 
 
@@ -132,23 +146,25 @@ async def add_price_amount(message: types.Message, state: FSMContext):
         # Конвертируем тенге в тиын
         price_rubles = float(message.text.replace(",", "."))
         price_kopecks = int(price_rubles * 100)
-        
+
         if price_kopecks <= 0:
-            await message.answer("❌ Цена должна быть положительной. Попробуйте еще раз:")
+            await message.answer(
+                "❌ Цена должна быть положительной. Попробуйте еще раз:"
+            )
             return
-        
+
         data = await state.get_data()
-        
+
         # Сохраняем в базу данных
         async with async_session() as session:
             new_price = Price(
                 title=data["title"],
                 description=data["description"],
-                price=price_kopecks
+                price=price_kopecks,
             )
             session.add(new_price)
             await session.commit()
-        
+
         await message.answer(
             f"✅ Позиция успешно добавлена!\n\n"
             f"📦 {data['title']}\n"
@@ -156,9 +172,11 @@ async def add_price_amount(message: types.Message, state: FSMContext):
             f"📝 Описание: {data['description'] or 'Не указано'}"
         )
         await state.clear()
-        
+
     except ValueError:
-        await message.answer("❌ Неверный формат цены. Введите число (например: 1500 или 1500.50):")
+        await message.answer(
+            "❌ Неверный формат цены. Введите число (например: 1500 или 1500.50):"
+        )
 
 
 @router.callback_query(F.data.startswith("edit_price_"))
@@ -166,31 +184,43 @@ async def edit_price_start(callback: types.CallbackQuery, state: FSMContext):
     if not await is_admin(callback.from_user.id):
         await callback.answer("Доступ запрещен", show_alert=True)
         return
-    
+
     price_id = int(callback.data.split("_")[2])
-    
+
     async with async_session() as session:
         result = await session.execute(select(Price).where(Price.id == price_id))
         price = result.scalar_one_or_none()
-        
+
         if not price:
             await callback.answer("Позиция не найдена", show_alert=True)
             return
-    
+
     await state.update_data(editing_price_id=price_id)
-    
+
     edit_kb = InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="📦 Изменить название", callback_data=f"edit_title_{price_id}")],
-            [InlineKeyboardButton(text="📝 Изменить описание", callback_data=f"edit_desc_{price_id}")],
-            [InlineKeyboardButton(text="💰 Изменить цену", callback_data=f"edit_amount_{price_id}")],
-            [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_edit")]
+            [
+                InlineKeyboardButton(
+                    text="📦 Изменить название", callback_data=f"edit_title_{price_id}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📝 Изменить описание", callback_data=f"edit_desc_{price_id}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="💰 Изменить цену", callback_data=f"edit_amount_{price_id}"
+                )
+            ],
+            [InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_edit")],
         ]
     )
-    
+
     await callback.message.edit_text(
         f"Редактирование позиции: {price.title}\n\nВыберите что изменить:",
-        reply_markup=edit_kb
+        reply_markup=edit_kb,
     )
 
 
@@ -205,18 +235,18 @@ async def edit_title_start(callback: types.CallbackQuery, state: FSMContext):
 async def edit_title_finish(message: types.Message, state: FSMContext):
     data = await state.get_data()
     price_id = data["editing_price_id"]
-    
+
     async with async_session() as session:
         result = await session.execute(select(Price).where(Price.id == price_id))
         price = result.scalar_one_or_none()
-        
+
         if price:
             price.title = message.text
             await session.commit()
             await message.answer(f"✅ Название изменено на: {message.text}")
         else:
             await message.answer("❌ Позиция не найдена")
-    
+
     await state.clear()
 
 
@@ -232,18 +262,20 @@ async def edit_description_finish(message: types.Message, state: FSMContext):
     data = await state.get_data()
     price_id = data["editing_price_id"]
     description = None if message.text == "-" else message.text
-    
+
     async with async_session() as session:
         result = await session.execute(select(Price).where(Price.id == price_id))
         price = result.scalar_one_or_none()
-        
+
         if price:
             price.description = description
             await session.commit()
-            await message.answer(f"✅ Описание изменено на: {description or 'Не указано'}")
+            await message.answer(
+                f"✅ Описание изменено на: {description or 'Не указано'}"
+            )
         else:
             await message.answer("❌ Позиция не найдена")
-    
+
     await state.clear()
 
 
@@ -259,27 +291,31 @@ async def edit_amount_finish(message: types.Message, state: FSMContext):
     try:
         price_rubles = float(message.text.replace(",", "."))
         price_kopecks = int(price_rubles * 100)
-        
+
         if price_kopecks <= 0:
-            await message.answer("❌ Цена должна быть положительной. Попробуйте еще раз:")
+            await message.answer(
+                "❌ Цена должна быть положительной. Попробуйте еще раз:"
+            )
             return
-        
+
         data = await state.get_data()
         price_id = data["editing_price_id"]
-        
+
         async with async_session() as session:
             result = await session.execute(select(Price).where(Price.id == price_id))
             price = result.scalar_one_or_none()
-            
+
             if price:
                 price.price = price_kopecks
                 await session.commit()
-                await message.answer(f"✅ Цена изменена на: {price_kopecks // 100}.{price_kopecks % 100:02d} тг.")
+                await message.answer(
+                    f"✅ Цена изменена на: {price_kopecks // 100}.{price_kopecks % 100:02d} тг."
+                )
             else:
                 await message.answer("❌ Позиция не найдена")
-        
+
         await state.clear()
-        
+
     except ValueError:
         await message.answer("❌ Неверный формат цены. Введите число:")
 
@@ -289,32 +325,33 @@ async def delete_price_confirm(callback: types.CallbackQuery):
     if not await is_admin(callback.from_user.id):
         await callback.answer("Доступ запрещен", show_alert=True)
         return
-    
+
     price_id = int(callback.data.split("_")[2])
-    
+
     confirm_kb = InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text="✅ Да, удалить", callback_data=f"confirm_delete_{price_id}"),
-                InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_delete")
+                InlineKeyboardButton(
+                    text="✅ Да, удалить", callback_data=f"confirm_delete_{price_id}"
+                ),
+                InlineKeyboardButton(text="❌ Отмена", callback_data="cancel_delete"),
             ]
         ]
     )
-    
+
     await callback.message.edit_text(
-        "⚠️ Вы уверены, что хотите удалить эту позицию?",
-        reply_markup=confirm_kb
+        "⚠️ Вы уверены, что хотите удалить эту позицию?", reply_markup=confirm_kb
     )
 
 
 @router.callback_query(F.data.startswith("confirm_delete_"))
 async def delete_price_execute(callback: types.CallbackQuery):
     price_id = int(callback.data.split("_")[2])
-    
+
     async with async_session() as session:
         result = await session.execute(select(Price).where(Price.id == price_id))
         price = result.scalar_one_or_none()
-        
+
         if price:
             title = price.title
             await session.delete(price)
