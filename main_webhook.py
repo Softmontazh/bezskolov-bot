@@ -5,7 +5,7 @@ import os
 import logging
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler
 from aiohttp import web
 from handlers import user, price
 from database.db import init_db
@@ -79,12 +79,12 @@ def create_app() -> web.Application:
     dp.startup.register(on_startup)
     dp.shutdown.register(on_shutdown)
 
+    # Создание aiohttp приложения
+    app = web.Application()
+
     # Создание обработчика webhook запросов
     webhook_requests_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
-    webhook_requests_handler.register(dp, path=WEBHOOK_PATH)
-
-    # Настройка aiohttp приложения
-    app = setup_application(dp, bot)
+    webhook_requests_handler.register(app, path=WEBHOOK_PATH)
 
     # Добавление route для проверки здоровья
     async def health_check(request):
