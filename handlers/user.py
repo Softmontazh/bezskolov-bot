@@ -2,7 +2,7 @@
 
 from aiogram import Router, F, types, Bot
 from aiogram.fsm.context import FSMContext
-from fsm.request import RequestFSM, AdminFSM
+from fsm.request import RequestFSM, AdminFSM, PriceFSM
 from database.models import PaintRequest
 from database.db import async_session
 from aiogram.filters import CommandStart
@@ -16,6 +16,7 @@ ADMIN_KB = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="Все заявки")],
         [KeyboardButton(text="Поиск по номеру")],
+        [KeyboardButton(text="Работа с прайсом")],
         [KeyboardButton(text="Выйти из админки")],
     ],
     resize_keyboard=True,
@@ -26,6 +27,7 @@ USER_KB = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="Оформить заявку")],
         [KeyboardButton(text="Мои заявки")],
+        [KeyboardButton(text="Посмотреть прайс")],
     ],
     resize_keyboard=True,
     one_time_keyboard=True,
@@ -78,7 +80,7 @@ async def cmd_start(message: types.Message, state: FSMContext):
     else:
         await message.answer(
             f"Привет, {username}! 👋\n\n"
-            "Добро пожаловать в бот для заказа покраски автомобилей!\n\n"
+            "Добро пожаловать в бот для заказа заводской краски для сколов!\n\n"
             "Выберите действие:",
             reply_markup=USER_KB,
         )
@@ -136,7 +138,7 @@ async def input_image(message: types.Message, state: FSMContext):
 async def skip_image(message: types.Message, state: FSMContext):
     await state.update_data(image=None)
     await message.answer(
-        "Пойдет!!\n\nТеперь укажите Ваши контакты для связи\n\nВведите номер телефона:"
+        "Пойдет!!\n\nТеперь укажите номер телефона, куда выставить счет\n\nВведите номер телефона:"
     )
     await state.set_state(RequestFSM.phone)
 
@@ -144,7 +146,15 @@ async def skip_image(message: types.Message, state: FSMContext):
 @router.message(RequestFSM.phone)
 async def input_phone(message: types.Message, state: FSMContext):
     await state.update_data(phone_number=message.text)
-    await message.answer("Адрес (куда доставить):")
+    await message.answer("Напишите пожалуйста Ваши данные для доставки:\n\n"
+                         "Фамилия Имя\n"
+                         "Телефон для связи\n"
+                         "Город\n"
+                         "Улица\n"
+                         "Дом\n"
+                         "Квартира\n"
+                         "Индекс\n"
+                         "ЛИБО АДРЕС НУЖНОГО ПОЧТОВОГО ОТДЕЛЕНИЯ")
     await state.set_state(RequestFSM.address)
 
 
@@ -545,7 +555,7 @@ async def change_request_status(callback: types.CallbackQuery, bot: Bot):
 @router.message(F.text == "Оформить заявку")
 async def start_new_request(message: types.Message, state: FSMContext):
     await message.answer(
-        "Отлично! Давайте оформим заявку на покраску.\n\nВведите марку авто:",
+        "Отлично! Давайте оформим заявку по поиску и подбору вашего оригинального цвета.\n\nВведите марку авто:",
         reply_markup=REQUEST_KB,
     )
     await state.set_state(RequestFSM.brand)

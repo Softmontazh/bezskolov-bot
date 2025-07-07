@@ -28,3 +28,12 @@ class PaintRequest(BaseModel):  # Наследуем от BaseModel
     address = Column(String, nullable=True)
     notes = Column(String, nullable=True)  # Дополнительные заметки
     status = Column(String, default="pending")  # Статус запроса
+
+
+class Price(BaseModel):  # Наследуем от BaseModel
+    __tablename__ = "prices"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    description = Column(String, nullable=True)
+    price = Column(Integer, nullable=False)  # Цена в тиын для точности

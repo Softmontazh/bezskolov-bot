@@ -16,3 +16,12 @@ class RequestFSM(StatesGroup):
 
 class AdminFSM(StatesGroup):
     search_phone = State()  # Состояние для поиска по номеру телефона
+
+
+class PriceFSM(StatesGroup):
+    add_title = State()
+    add_description = State()
+    add_price = State()
+    edit_title = State()
+    edit_description = State()
+    edit_price = State()
