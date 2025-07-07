@@ -103,7 +103,7 @@ async def check_file_structure():
             print(f"  ❌ {file_path}")
 
 async def main():
-    print("🚀 Проверка статуса Paint Service Bot\n")
+    print("🚀 Проверка статуса BezSkolov Bot\n")
     
     # Проверяем все компоненты
     imports_ok = await check_imports()

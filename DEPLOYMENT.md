@@ -1,4 +1,4 @@
-# Инструкции по развертыванию Paint Service Bot
+# Инструкции по развертыванию BezSkolov Bot
 
 ## Быстрый старт
 
@@ -14,8 +14,8 @@ sudo yum install python3 python3-pip git
 
 ### 2. Клонирование и настройка
 ```bash
-git clone https://github.com/your-username/paint-service-bot.git
-cd paint-service-bot
+git clone https://github.com/Softmontazh/bezskolov-bot.git
+cd bezskolov-bot
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -38,7 +38,7 @@ python main.py
 
 1. Создайте файл сервиса:
 ```bash
-sudo nano /etc/systemd/system/paint-bot.service
+sudo nano /etc/systemd/system/bezskolov-bot.service
 ```
 
 2. Содержимое файла:
@@ -52,9 +52,9 @@ Wants=network.target
 Type=simple
 User=ubuntu
 Group=ubuntu
-WorkingDirectory=/home/ubuntu/paint-service-bot
-Environment=PATH=/home/ubuntu/paint-service-bot/venv/bin
-ExecStart=/home/ubuntu/paint-service-bot/venv/bin/python main.py
+WorkingDirectory=/home/ubuntu/bezskolov-bot
+Environment=PATH=/home/ubuntu/bezskolov-bot/venv/bin
+ExecStart=/home/ubuntu/bezskolov-bot/venv/bin/python main.py
 Restart=always
 RestartSec=10
 
@@ -65,15 +65,15 @@ WantedBy=multi-user.target
 3. Запуск сервиса:
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable paint-bot
-sudo systemctl start paint-bot
-sudo systemctl status paint-bot
+sudo systemctl enable bezskolov-bot
+sudo systemctl start bezskolov-bot
+sudo systemctl status bezskolov-bot
 ```
 
 ### С использованием screen (альтернатива)
 ```bash
-screen -S paint-bot
-cd paint-service-bot
+screen -S bezskolov-bot
+cd bezskolov-bot
 source venv/bin/activate
 python main.py
 # Ctrl+A, D для отключения от сессии
@@ -95,7 +95,7 @@ CMD ["python", "main.py"]
 
 ### Просмотр логов systemd
 ```bash
-sudo journalctl -u paint-bot -f
+sudo journalctl -u bezskolov-bot -f
 ```
 
 ### Автоматический перезапуск при падении
@@ -104,11 +104,11 @@ Systemd автоматически перезапустит бот если он
 ## Обновление
 
 ```bash
-cd paint-service-bot
+cd bezskolov-bot
 git pull origin main
 source venv/bin/activate
 pip install -r requirements.txt
-sudo systemctl restart paint-bot
+sudo systemctl restart bezskolov-bot
 ```
 
 ## Резервное копирование
