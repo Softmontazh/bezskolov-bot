@@ -1,11 +1,10 @@
-# main_webhook.py - версия для webhook деплоя
+# main_webhook.py - версия для aiogram 3.x
 
-import asyncio
 import os
 import logging
 from dotenv import load_dotenv
 from aiogram import Bot, Dispatcher
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 from handlers import user, price
 from database.db import init_db
@@ -25,22 +24,23 @@ WEBHOOK_PATH = f"/bot/{BOT_TOKEN}"
 WEBHOOK_URL = f"{WEBHOOK_HOST}{WEBHOOK_PATH}"
 
 # Веб-сервер настройки
-WEB_SERVER_HOST = "127.0.0.1"
+WEB_SERVER_HOST = "0.0.0.0"  # Изменил с 127.0.0.1 на 0.0.0.0 для VPS
 WEB_SERVER_PORT = int(os.getenv("WEBHOOK_PORT", 8080))
 
 
 async def on_startup(bot: Bot) -> None:
     """Действия при запуске бота"""
     try:
-        # Инициализация базы данных
         await init_db()
         logger.info("База данных инициализирована")
 
-        # Установка webhook
-        await bot.set_webhook(url=WEBHOOK_URL, drop_pending_updates=True)
+        await bot.set_webhook(
+            url=WEBHOOK_URL,
+            drop_pending_updates=True,
+            allowed_updates=["message", "callback_query"]  # Явно указываем типы updates
+        )
         logger.info(f"Webhook установлен: {WEBHOOK_URL}")
 
-        # Получение информации о боте
         bot_info = await bot.get_me()
         logger.info(f"Бот запущен: @{bot_info.username}")
 
@@ -60,15 +60,13 @@ async def on_shutdown(bot: Bot) -> None:
 
 def create_app() -> web.Application:
     """Создание и настройка aiohttp приложения"""
-
     if not BOT_TOKEN:
         raise ValueError("BOT_TOKEN не найден в переменных окружения")
 
     if not WEBHOOK_HOST or WEBHOOK_HOST == "https://yourdomain.com":
         raise ValueError("WEBHOOK_HOST должен быть настроен в .env файле")
 
-    # Создание бота и диспетчера
-    bot = Bot(token=BOT_TOKEN)
+    bot = Bot(token=BOT_TOKEN, parse_mode="HTML")
     dp = Dispatcher()
 
     # Регистрация роутеров
@@ -79,19 +77,24 @@ def create_app() -> web.Application:
     dp.startup.register(on_startup)
     dp.shutdown.register(on_shutdown)
 
-    # Создание aiohttp приложения
     app = web.Application()
-
-    # Создание обработчика webhook запросов
-    webhook_requests_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
+    webhook_requests_handler = SimpleRequestHandler(
+        dispatcher=dp,
+        bot=bot,
+    )
+    
+    # Важно: регистрируем обработчик правильно
     webhook_requests_handler.register(app, path=WEBHOOK_PATH)
-
-    # Добавление route для проверки здоровья
+    
+    # Добавляем health check
     async def health_check(request):
         return web.json_response({"status": "ok", "bot": "BezSkolov Bot"})
 
     app.router.add_get("/health", health_check)
-
+    
+    # Важно для aiogram 3.x
+    setup_application(app, dp, bot=bot)
+    
     return app
 
 
@@ -103,9 +106,12 @@ def main() -> None:
         logger.info(f"Webhook URL: {WEBHOOK_URL}")
 
         app = create_app()
-
-        # Запуск веб-сервера
-        web.run_app(app, host=WEB_SERVER_HOST, port=WEB_SERVER_PORT, access_log=logger)
+        web.run_app(
+            app,
+            host=WEB_SERVER_HOST,
+            port=WEB_SERVER_PORT,
+            access_log=logger
+        )
 
     except Exception as e:
         logger.error(f"Критическая ошибка: {e}")
