@@ -37,7 +37,10 @@ async def on_startup(bot: Bot) -> None:
         await bot.set_webhook(
             url=WEBHOOK_URL,
             drop_pending_updates=True,
-            allowed_updates=["message", "callback_query"]  # Явно указываем типы updates
+            allowed_updates=[
+                "message",
+                "callback_query",
+            ],  # Явно указываем типы updates
         )
         logger.info(f"Webhook установлен: {WEBHOOK_URL}")
 
@@ -82,19 +85,19 @@ def create_app() -> web.Application:
         dispatcher=dp,
         bot=bot,
     )
-    
+
     # Важно: регистрируем обработчик правильно
     webhook_requests_handler.register(app, path=WEBHOOK_PATH)
-    
+
     # Добавляем health check
     async def health_check(request):
         return web.json_response({"status": "ok", "bot": "BezSkolov Bot"})
 
     app.router.add_get("/health", health_check)
-    
+
     # Важно для aiogram 3.x
     setup_application(app, dp, bot=bot)
-    
+
     return app
 
 
@@ -106,12 +109,7 @@ def main() -> None:
         logger.info(f"Webhook URL: {WEBHOOK_URL}")
 
         app = create_app()
-        web.run_app(
-            app,
-            host=WEB_SERVER_HOST,
-            port=WEB_SERVER_PORT,
-            access_log=logger
-        )
+        web.run_app(app, host=WEB_SERVER_HOST, port=WEB_SERVER_PORT, access_log=logger)
 
     except Exception as e:
         logger.error(f"Критическая ошибка: {e}")

@@ -15,6 +15,7 @@ from sqlalchemy import select
 ADMIN_KB = ReplyKeyboardMarkup(
     keyboard=[
         [KeyboardButton(text="Все заявки")],
+        [KeyboardButton(text="Активные заявки")],
         [KeyboardButton(text="Поиск по номеру")],
         [KeyboardButton(text="Работа с прайсом")],
         [KeyboardButton(text="Выйти из админки")],
@@ -238,11 +239,12 @@ async def confirm_yes(callback: types.CallbackQuery, state: FSMContext, bot: Bot
             else:
                 await bot.send_message(int(KATYA_ID), notification_text)
 
-        except TelegramBadRequest:
+        except TelegramBadRequest as e:
             # Владелец не начинал общение с ботом - игнорируем ошибку
-            pass
+            print(f"Не удалось отправить уведомление владельцу (KATYA_ID={KATYA_ID}): {e}")
+            print("Возможные причины: владелец не писал боту /start, заблокировал бота или удалил аккаунт")
         except Exception as e:
-            print(f"Ошибка при отправке уведомления: {e}")
+            print(f"Ошибка при отправке уведомления владельцу: {e}")
 
     await callback.message.edit_text(
         "✅ Заявка успешно отправлена!\n\n"
@@ -313,11 +315,11 @@ async def show_all_requests(message: types.Message, state: FSMContext):
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
-                        text="� В ожидании",
+                        text="🟡 В ожидании",
                         callback_data=f"status_pending_{request.id}",
                     ),
                     InlineKeyboardButton(
-                        text="� В работе",
+                        text="🔵 В работе",
                         callback_data=f"status_in_progress_{request.id}",
                     ),
                 ],
@@ -335,9 +337,13 @@ async def show_all_requests(message: types.Message, state: FSMContext):
         )
 
         if request.image_id:
-            await message.answer_photo(
-                photo=request.image_id, caption=text, reply_markup=status_kb
-            )
+            try:
+                await message.answer_photo(
+                    photo=request.image_id, caption=text, reply_markup=status_kb
+                )
+            except Exception as e:
+                # Если фото не удалось отправить (неверный file_id), отправляем как текст
+                await message.answer(f"{text}\n\n📷 Изображение недоступно", reply_markup=status_kb)
         else:
             await message.answer(text, reply_markup=status_kb)
 
@@ -347,6 +353,96 @@ async def show_all_requests(message: types.Message, state: FSMContext):
         )
     else:
         await message.answer("Это все заявки.", reply_markup=ADMIN_KB)
+
+
+@router.message(F.text == "Активные заявки")
+async def show_active_requests(message: types.Message, state: FSMContext):
+    CREATOR_ID = os.environ.get("CREATOR_ID")
+    KATYA_ID = os.environ.get("KATYA_ID")
+
+    # Проверяем, что это админ
+    if not (
+        str(message.from_user.id) == str(KATYA_ID)
+        or str(message.from_user.id) == str(CREATOR_ID)
+    ):
+        await message.answer("У вас нет доступа к этой команде.")
+        return
+
+    async with async_session() as session:
+        result = await session.execute(
+            select(PaintRequest)
+            .where(PaintRequest.status.in_(["pending", "in_progress"]))
+            .order_by(PaintRequest.created_at.desc())
+        )
+        requests = result.scalars().all()
+
+    if not requests:
+        await message.answer("📋 Активных заявок пока нет.", reply_markup=ADMIN_KB)
+        return
+
+    await message.answer(f"🔥 Активные заявки ({len(requests)}):")
+
+    # Показываем все активные заявки
+    for request in requests:
+        status_emoji = {
+            "pending": "🟡",
+            "in_progress": "🔵",
+            "completed": "🟢",
+            "cancelled": "🔴",
+        }.get(request.status, "⚪")
+
+        text = (
+            f"{status_emoji} Заявка #{request.id}\n"
+            f"👤 ID пользователя: {request.user_id}\n"
+            f"🚗 {request.brand} {request.model}\n"
+            f"🎨 Код краски: {request.color_code}\n"
+            f"🔢 VIN: {request.vin or 'Не указан'}\n"
+            f"📅 Год: {request.year or 'Не указан'}\n"
+            f"📞 Телефон: {request.phone_number}\n"
+            f"📍 Адрес: {request.address}\n"
+            f"📝 Заметки: {request.notes or 'Нет'}\n"
+            f"📅 Создана: {request.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+            f"📊 Статус: {request.status}"
+        )
+
+        # Кнопки для изменения статуса
+        status_kb = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="🟡 В ожидании",
+                        callback_data=f"status_pending_{request.id}",
+                    ),
+                    InlineKeyboardButton(
+                        text="🔵 В работе",
+                        callback_data=f"status_in_progress_{request.id}",
+                    ),
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="🟢 Выполнено",
+                        callback_data=f"status_completed_{request.id}",
+                    ),
+                    InlineKeyboardButton(
+                        text="🔴 Отменено",
+                        callback_data=f"status_cancelled_{request.id}",
+                    ),
+                ],
+            ]
+        )
+
+        if request.image_id:
+            try:
+                await message.answer_photo(
+                    photo=request.image_id, caption=text, reply_markup=status_kb
+                )
+            except Exception as e:
+                # Если фото не удалось отправить (неверный file_id), отправляем как текст
+                await message.answer(f"{text}\n\n📷 Изображение недоступно", reply_markup=status_kb)
+        else:
+            await message.answer(text, reply_markup=status_kb)
+
+    await message.answer("Это все активные заявки.", reply_markup=ADMIN_KB)
 
 
 @router.message(F.text == "Поиск по номеру")
@@ -414,11 +510,11 @@ async def search_by_phone(message: types.Message, state: FSMContext):
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
-                        text="� В ожидании",
+                        text="🟡 В ожидании",
                         callback_data=f"status_pending_{request.id}",
                     ),
                     InlineKeyboardButton(
-                        text="� В работе",
+                        text="🔵 В работе",
                         callback_data=f"status_in_progress_{request.id}",
                     ),
                 ],
@@ -436,9 +532,13 @@ async def search_by_phone(message: types.Message, state: FSMContext):
         )
 
         if request.image_id:
-            await message.answer_photo(
-                photo=request.image_id, caption=text, reply_markup=status_kb
-            )
+            try:
+                await message.answer_photo(
+                    photo=request.image_id, caption=text, reply_markup=status_kb
+                )
+            except Exception as e:
+                # Если фото не удалось отправить (неверный file_id), отправляем как текст
+                await message.answer(f"{text}\n\n📷 Изображение недоступно", reply_markup=status_kb)
         else:
             await message.answer(text, reply_markup=status_kb)
 
@@ -449,9 +549,23 @@ async def search_by_phone(message: types.Message, state: FSMContext):
 # Обработчики изменения статуса заявки
 @router.callback_query(F.data.startswith("status_"))
 async def change_request_status(callback: types.CallbackQuery, bot: Bot):
-    data_parts = callback.data.split("_")
-    new_status = data_parts[1]
-    request_id = int(data_parts[2])
+    # Парсим callback_data правильно для статуса "in_progress"
+    callback_data = callback.data
+    if callback_data.startswith("status_pending_"):
+        new_status = "pending"
+        request_id = int(callback_data.replace("status_pending_", ""))
+    elif callback_data.startswith("status_in_progress_"):
+        new_status = "in_progress"
+        request_id = int(callback_data.replace("status_in_progress_", ""))
+    elif callback_data.startswith("status_completed_"):
+        new_status = "completed"
+        request_id = int(callback_data.replace("status_completed_", ""))
+    elif callback_data.startswith("status_cancelled_"):
+        new_status = "cancelled"
+        request_id = int(callback_data.replace("status_cancelled_", ""))
+    else:
+        await callback.answer("Неизвестный статус", show_alert=True)
+        return
 
     async with async_session() as session:
         result = await session.execute(
@@ -524,10 +638,10 @@ async def change_request_status(callback: types.CallbackQuery, bot: Bot):
         inline_keyboard=[
             [
                 InlineKeyboardButton(
-                    text="� В ожидании", callback_data=f"status_pending_{request_id}"
+                    text="🟡 В ожидании", callback_data=f"status_pending_{request_id}"
                 ),
                 InlineKeyboardButton(
-                    text="� В работе", callback_data=f"status_in_progress_{request_id}"
+                    text="🔵 В работе", callback_data=f"status_in_progress_{request_id}"
                 ),
             ],
             [
